@@ -18,10 +18,12 @@ const upload = multer({
 });
 
 /**
- * Devuelve la extensión canónica a partir del mimetype.
+ * Devuelve el formato canónico que la BD acepta en imagen.formato
+ * (CHECK IN ('jpeg','png')). También sirve como extensión del archivo
+ * en Supabase Storage, para mantener un único identificador.
  */
 function extensionDeMime(mimetype) {
-  if (mimetype === 'image/jpeg') return 'jpg';
+  if (mimetype === 'image/jpeg') return 'jpeg';
   if (mimetype === 'image/png') return 'png';
   return 'bin';
 }
