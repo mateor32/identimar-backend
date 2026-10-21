@@ -18,13 +18,13 @@ const REGLAS_DECISION = {
   rechazada: { nuevoEstado: 'corregido', requiereEspecie: false, especieAceptada: 'anular' },
 };
 
-async function obtenerIdEstado(client, nombre) {
+async function obtenerIdEstado(client, codigo) {
   const { rows } = await client.query(
-    `SELECT id FROM estado_observacion WHERE nombre = $1 LIMIT 1`,
-    [nombre],
+    `SELECT id FROM estado_observacion WHERE codigo = $1 LIMIT 1`,
+    [codigo],
   );
   if (!rows[0]) {
-    throw new NoEncontradoError(`Estado "${nombre}" no está sembrado en la BD`);
+    throw new NoEncontradoError(`Estado "${codigo}" no está sembrado en la BD`);
   }
   return rows[0].id;
 }
@@ -90,7 +90,7 @@ async function registrarValidacion({
   return withTransaction(async (client) => {
     // 1. Bloquear la observación y leer su estado actual.
     const { rows: obsRows } = await client.query(
-      `SELECT o.id, o.estado_id, e.nombre AS estado_nombre
+      `SELECT o.id, o.estado_id, e.codigo AS estado_codigo
        FROM observacion o
        JOIN estado_observacion e ON e.id = o.estado_id
        WHERE o.id = $1
@@ -103,9 +103,9 @@ async function registrarValidacion({
     }
 
     // 2. El estado actual debe permitir validación.
-    if (!ESTADOS_PENDIENTES.includes(obs.estado_nombre)) {
+    if (!ESTADOS_PENDIENTES.includes(obs.estado_codigo)) {
       throw new ConflictoError(
-        `La observación está en estado "${obs.estado_nombre}" y no admite validación experta`,
+        `La observación está en estado "${obs.estado_codigo}" y no admite validación experta`,
       );
     }
 

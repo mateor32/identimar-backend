@@ -21,14 +21,14 @@ async function resolverIdPorCodigo(client, tabla, codigo, etiquetaCampo) {
   ]);
 }
 
-async function obtenerEstadoIdPorNombre(client, nombre) {
+async function obtenerEstadoIdPorCodigo(client, codigo) {
   const { rows } = await client.query(
-    `SELECT id FROM estado_observacion WHERE nombre = $1 LIMIT 1`,
-    [nombre],
+    `SELECT id FROM estado_observacion WHERE codigo = $1 LIMIT 1`,
+    [codigo],
   );
   if (!rows[0]) {
     // Esto sería un bug de datos (seeds faltantes), no un input inválido.
-    throw new NoEncontradoError(`Estado "${nombre}" no está sembrado en la BD`);
+    throw new NoEncontradoError(`Estado "${codigo}" no está sembrado en la BD`);
   }
   return rows[0].id;
 }
@@ -77,7 +77,7 @@ async function crearObservacion({ usuario, datos, imagen }) {
       }
 
       // 3. Estado inicial.
-      const estadoId = await obtenerEstadoIdPorNombre(client, 'recibido');
+      const estadoId = await obtenerEstadoIdPorCodigo(client, 'recibido');
 
       // 4. INSERT observacion.
       const { rows: obsRows } = await client.query(
@@ -174,7 +174,7 @@ async function listarObservaciones({ filtroUsuarioId, estadoNombre, pagina, tama
   const whereParams = [filtroUsuarioId || null, estadoNombre || null];
   const whereClause = `
     WHERE ($1::uuid IS NULL OR o.usuario_id = $1)
-      AND ($2::text IS NULL OR e.nombre = $2)
+      AND ($2::text IS NULL OR e.codigo = $2)
   `;
 
   const { rows: countRows } = await query(
@@ -193,9 +193,9 @@ async function listarObservaciones({ filtroUsuarioId, estadoNombre, pagina, tama
         o.longitud,
         o.fecha_hora_evento,
         o.creado_en,
-        json_build_object('id', e.id, 'nombre', e.nombre, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
+        json_build_object('id', e.id, 'codigo', e.codigo, 'nombre_visible', e.nombre_visible, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
         CASE WHEN sp.id IS NOT NULL
-             THEN json_build_object('id', sp.id, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
+             THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
         END AS especie_sugerida
      FROM observacion o
      JOIN estado_observacion e ON e.id = o.estado_id
@@ -222,7 +222,7 @@ async function listarPendientes({ pagina, tamano }) {
     `SELECT COUNT(*)::int AS total
      FROM observacion o
      JOIN estado_observacion e ON e.id = o.estado_id
-     WHERE e.nombre = ANY($1::text[])`,
+     WHERE e.codigo = ANY($1::text[])`,
     [ESTADOS_PENDIENTES],
   );
   const total = countRows[0].total;
@@ -234,14 +234,14 @@ async function listarPendientes({ pagina, tamano }) {
         o.longitud,
         o.fecha_hora_evento,
         o.creado_en,
-        json_build_object('id', e.id, 'nombre', e.nombre, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
+        json_build_object('id', e.id, 'codigo', e.codigo, 'nombre_visible', e.nombre_visible, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
         CASE WHEN sp.id IS NOT NULL
-             THEN json_build_object('id', sp.id, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
+             THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
         END AS especie_sugerida,
         json_build_object('id', u.id, 'nombre', u.nombre, 'rol', u.rol) AS usuario,
         (SELECT json_build_object('id', p.id, 'score', p.score,
                  'especie', CASE WHEN psp.id IS NOT NULL
-                   THEN json_build_object('id', psp.id, 'nombre_cientifico', psp.nombre_cientifico, 'nombre_comun', psp.nombre_comun)
+                   THEN json_build_object('id', psp.id, 'codigo', psp.codigo, 'nombre_cientifico', psp.nombre_cientifico, 'nombre_comun', psp.nombre_comun)
                  END)
          FROM prediccion p
          LEFT JOIN especie psp ON psp.id = p.especie_id
@@ -252,7 +252,7 @@ async function listarPendientes({ pagina, tamano }) {
      JOIN estado_observacion e ON e.id = o.estado_id
      JOIN usuario u ON u.id = o.usuario_id
      LEFT JOIN especie sp ON sp.id = o.especie_id
-     WHERE e.nombre = ANY($1::text[])
+     WHERE e.codigo = ANY($1::text[])
      ORDER BY o.creado_en ASC
      LIMIT $2 OFFSET $3`,
     [ESTADOS_PENDIENTES, tamano, offset],
@@ -280,11 +280,11 @@ async function obtenerObservacionCompleta(id) {
         o.notas,
         o.creado_en,
         o.usuario_id,
-        json_build_object('id', e.id, 'nombre', e.nombre, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
-        json_build_object('id', ta.id, 'nombre', ta.nombre) AS tipo_ambiente,
-        json_build_object('id', co.id, 'nombre', co.nombre) AS condicion_organismo,
+        json_build_object('id', e.id, 'codigo', e.codigo, 'nombre_visible', e.nombre_visible, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
+        json_build_object('id', ta.id, 'codigo', ta.codigo, 'nombre_visible', ta.nombre_visible) AS tipo_ambiente,
+        json_build_object('id', co.id, 'codigo', co.codigo, 'nombre_visible', co.nombre_visible) AS condicion_organismo,
         CASE WHEN sp.id IS NOT NULL
-             THEN json_build_object('id', sp.id, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
+             THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
         END AS especie_sugerida,
         json_build_object('id', u.id, 'nombre', u.nombre, 'correo', u.correo, 'rol', u.rol) AS usuario
      FROM observacion o
@@ -317,7 +317,7 @@ async function obtenerObservacionCompleta(id) {
         p.score,
         p.creado_en,
         CASE WHEN sp.id IS NOT NULL
-             THEN json_build_object('id', sp.id, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
+             THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
         END AS especie,
         CASE WHEN vm.id IS NOT NULL
              THEN json_build_object('id', vm.id, 'nombre', vm.nombre)
@@ -339,9 +339,9 @@ async function obtenerObservacionCompleta(id) {
         v.nota,
         v.creado_en,
         json_build_object('id', u.id, 'nombre', u.nombre, 'correo', u.correo, 'rol', u.rol) AS experto,
-        json_build_object('id', d.id, 'nombre', d.nombre) AS decision,
+        json_build_object('id', d.id, 'codigo', d.codigo, 'nombre_visible', d.nombre_visible) AS decision,
         CASE WHEN sp.id IS NOT NULL
-             THEN json_build_object('id', sp.id, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
+             THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
         END AS especie_corregida
      FROM validacion_experta v
      JOIN usuario u ON u.id = v.usuario_id
@@ -361,9 +361,9 @@ async function obtenerObservacionCompleta(id) {
         h.nota,
         h.ocurrido_en,
         CASE WHEN ea.id IS NOT NULL
-             THEN json_build_object('id', ea.id, 'nombre', ea.nombre)
+             THEN json_build_object('id', ea.id, 'codigo', ea.codigo, 'nombre_visible', ea.nombre_visible)
         END AS estado_anterior,
-        json_build_object('id', en.id, 'nombre', en.nombre) AS estado_nuevo,
+        json_build_object('id', en.id, 'codigo', en.codigo, 'nombre_visible', en.nombre_visible) AS estado_nuevo,
         CASE WHEN u.id IS NOT NULL
              THEN json_build_object('id', u.id, 'nombre', u.nombre, 'rol', u.rol)
         END AS usuario

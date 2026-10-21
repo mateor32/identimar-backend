@@ -9,11 +9,15 @@ async function listarEspecies() {
   const { rows } = await query(
     `SELECT
        e.id,
+       e.codigo,
        e.nombre_cientifico,
        e.nombre_comun,
+       e.grupo,
+       e.descripcion,
+       e.url_imagen_referencia,
        json_build_object(
          'id', f.id,
-         'nombre', f.nombre
+         'nombre_cientifico', f.nombre_cientifico
        ) AS familia
      FROM especie e
      JOIN familia f ON f.id = e.familia_id
@@ -24,27 +28,27 @@ async function listarEspecies() {
 
 async function listarFamilias() {
   const { rows } = await query(
-    `SELECT id, nombre
+    `SELECT id, nombre_cientifico, descripcion
      FROM familia
-     ORDER BY nombre ASC`,
+     ORDER BY nombre_cientifico ASC`,
   );
   return rows;
 }
 
 async function listarTiposAmbiente() {
   const { rows } = await query(
-    `SELECT id, nombre
+    `SELECT id, codigo, nombre_visible, descripcion
      FROM tipo_ambiente
-     ORDER BY nombre ASC`,
+     ORDER BY nombre_visible ASC`,
   );
   return rows;
 }
 
 async function listarCondicionesOrganismo() {
   const { rows } = await query(
-    `SELECT id, nombre
+    `SELECT id, codigo, nombre_visible, descripcion
      FROM condicion_organismo
-     ORDER BY nombre ASC`,
+     ORDER BY nombre_visible ASC`,
   );
   return rows;
 }
@@ -55,7 +59,7 @@ async function listarCondicionesOrganismo() {
  */
 async function listarEstados() {
   const { rows } = await query(
-    `SELECT id, nombre, orden, es_terminal
+    `SELECT id, codigo, nombre_visible, descripcion, orden, es_terminal
      FROM estado_observacion
      ORDER BY orden ASC`,
   );
