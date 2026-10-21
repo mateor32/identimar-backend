@@ -1,0 +1,642 @@
+{
+  "info": {
+    "_postman_id": "identimar-backend-api-v1",
+    "name": "IdentiMar Backend API v1.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "# IdentiMar Backend API v1.0\n\nColección oficial de Postman del backend de **IdentiMar** — plataforma de ciencia ciudadana para el registro, identificación automática y validación experta de peces costeros del Golfo de Urabá.\n\n**Equipo responsable:** Equipo 3 — Universidad de Antioquia — Proyecto Integrador I (Etapa 2, hito A).\n\n**Repositorio:** https://github.com/EquipoIdentimar/identimar-backend\n\n**Entregable para:** Equipo 1 (aplicación móvil) y Equipo 2 (visión artificial).\n\n---\n\n## Antes de empezar\n\n1. Importa esta colección **y** el environment `IdentiMar - Local` (archivo `identimar.postman_environment.json`).\n2. Selecciona ese environment en la esquina superior derecha de Postman.\n3. Levanta el backend localmente con `npm run dev` o apunta `baseUrl` a la URL de Render.\n\n## Variables\n\n| Variable | Para qué sirve |\n|---|---|\n| `baseUrl` | URL base de la API (`http://localhost:3000/api/v1` por defecto). |\n| `hostUrl` | URL raíz del servidor, sin `/api/v1` — solo se usa para `GET /health`. |\n| `accessToken` | JWT; se autollena al hacer **Login** o **Refresh**. |\n| `refreshToken` | Token de refresco; se autollena al hacer **Login**. |\n| `userId` | ID del usuario autenticado; se autollena al hacer **Login**. |\n| `observacionId` | ID de la última observación creada; se autollena al **crear**. |\n| `especieCodigo` | Código de especie de ejemplo (`URO_MICR`). |\n\n## Flujo recomendado\n\n1. **01 · Autenticación → Registro** — crea una cuenta nueva.\n2. **01 · Autenticación → Login** — guarda `accessToken`, `refreshToken` y `userId`.\n3. **03 · Observaciones → Crear** — adjunta una JPEG/PNG; guarda `observacionId`.\n4. (Como experto o admin, cambia tu rol en la BD) **04 · Validación experta → Registrar validación**.\n5. **03 · Observaciones → Detalle** — revisa la observación con la validación aplicada.\n\n## Notas sobre la autenticación\n\nEl auth global de la colección es `Bearer {{accessToken}}`. Las carpetas `00`, `01` y `02` sobreescriben a `No Auth` porque son públicas; el único request autenticado dentro de `01` es `GET /auth/perfil`, que vuelve a usar bearer.",
+    "_fields_mapping_note": "Los nombres de campo siguen el contrato real del backend: `nombre` (no `nombre_completo`), `tipo_ambiente_codigo` / `condicion_organismo_codigo` / `notas` (no `tipo_ambiente` / `condicion_organismo` / `observaciones_usuario`). El backend no acepta `precision_gps_metros`."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+    ]
+  },
+  "event": [],
+  "variable": [],
+  "item": [
+    {
+      "name": "00 · Salud",
+      "description": "Health check del servidor. Público — no requiere token.",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{hostUrl}}/health",
+              "host": ["{{hostUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verifica que el servidor responde (ping ligero). Devuelve `{ \"status\": \"ok\" }`.\n\n**Nota:** este endpoint vive en la raíz del servidor (`/health`), no bajo `/api/v1`. Por eso usa `{{hostUrl}}` en lugar de `{{baseUrl}}`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Health responde 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"status = ok\", () => {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data.status).to.eql(\"ok\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "01 · Autenticación",
+      "description": "Registro, login, refresh y perfil. Los primeros tres son públicos; `GET /auth/perfil` requiere token.",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "POST /auth/registro",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ana Torres\",\n  \"correo\": \"ana.torres@ejemplo.co\",\n  \"password\": \"MiClave2026!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/registro",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "registro"]
+            },
+            "description": "Crea una nueva cuenta de usuario (rol por defecto: `usuario`). No devuelve token — tras registrarse hay que hacer login.\n\n**Body (JSON):**\n- `nombre` (string, 2–120 chars)\n- `correo` (string, email válido)\n- `password` (string, 8–72 chars)\n\n**Respuesta esperada:** `201 Created` con `{ usuario: { id, nombre, correo, rol, activo, creado_en } }`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Registro OK (201)\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Devuelve usuario público\", () => {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data.usuario).to.be.an(\"object\");",
+                  "  pm.expect(data.usuario.correo).to.be.a(\"string\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "POST /auth/login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"ana.torres@ejemplo.co\",\n  \"password\": \"MiClave2026!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Devuelve `access_token`, `refresh_token`, `expires_in` y el objeto `usuario` público.\n\nEl script de pruebas guarda automáticamente `accessToken`, `refreshToken` y `userId` en el environment."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.environment.set(\"accessToken\", data.access_token);",
+                  "pm.environment.set(\"refreshToken\", data.refresh_token);",
+                  "pm.environment.set(\"userId\", data.usuario.id);",
+                  "pm.test(\"Login exitoso\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Devuelve access_token\", () => pm.expect(data.access_token).to.be.a(\"string\"));",
+                  "pm.test(\"Devuelve refresh_token\", () => pm.expect(data.refresh_token).to.be.a(\"string\"));",
+                  "pm.test(\"Devuelve usuario con id\", () => pm.expect(data.usuario.id).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "POST /auth/refresh",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Intercambia un `refresh_token` válido por un nuevo `access_token`. El refresh no rota en esta versión.\n\nEl script de pruebas actualiza `accessToken` en el environment."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.access_token) pm.environment.set(\"accessToken\", data.access_token);",
+                  "pm.test(\"Refresh OK (200)\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Devuelve nuevo access_token\", () => pm.expect(data.access_token).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "GET /auth/perfil",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{accessToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/perfil",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "perfil"]
+            },
+            "description": "Devuelve el usuario público del token actual. Requiere `Authorization: Bearer {{accessToken}}`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Perfil OK (200)\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Devuelve usuario\", () => {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data.usuario).to.be.an(\"object\");",
+                  "  pm.expect(data.usuario.correo).to.be.a(\"string\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "02 · Catálogos",
+      "description": "Catálogos de referencia (especies, familias, tipos de ambiente, condiciones, estados). Todos son públicos — la app los consume para armar formularios y selects.",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "GET /catalogos/especies",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/especies",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "especies"]
+            },
+            "description": "Lista de especies con su familia embebida. Cacheado 5 min en el servidor."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Es un array\", () => pm.expect(Array.isArray(data)).to.be.true);",
+                  "pm.test(\"Tiene al menos un elemento\", () => pm.expect(data.length).to.be.greaterThan(0));"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "GET /catalogos/familias",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/familias",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "familias"]
+            },
+            "description": "Lista de familias taxonómicas."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Es un array\", () => pm.expect(Array.isArray(data)).to.be.true);",
+                  "pm.test(\"Tiene al menos un elemento\", () => pm.expect(data.length).to.be.greaterThan(0));"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "GET /catalogos/tipos-ambiente",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/tipos-ambiente",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "tipos-ambiente"]
+            },
+            "description": "Tipos de ambiente (marino, estuarino, dulceacuícola…)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Es un array\", () => pm.expect(Array.isArray(data)).to.be.true);",
+                  "pm.test(\"Tiene al menos un elemento\", () => pm.expect(data.length).to.be.greaterThan(0));"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "GET /catalogos/condiciones-organismo",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/condiciones-organismo",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "condiciones-organismo"]
+            },
+            "description": "Condiciones observadas del organismo (vivo, muerto, varado…)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Es un array\", () => pm.expect(Array.isArray(data)).to.be.true);",
+                  "pm.test(\"Tiene al menos un elemento\", () => pm.expect(data.length).to.be.greaterThan(0));"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "GET /catalogos/estados",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/estados",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "estados"]
+            },
+            "description": "Estados de la máquina de observación con `orden` y `es_terminal`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Es un array\", () => pm.expect(Array.isArray(data)).to.be.true);",
+                  "pm.test(\"Tiene al menos un elemento\", () => pm.expect(data.length).to.be.greaterThan(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "03 · Observaciones",
+      "description": "Crear, listar y consultar observaciones. Todos los endpoints requieren `Authorization: Bearer {{accessToken}}` (heredado del auth global de la colección).",
+      "item": [
+        {
+          "name": "POST /observaciones",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "datos",
+                  "type": "text",
+                  "value": "{\n  \"fecha_hora_evento\": \"2026-10-20T14:35:00-05:00\",\n  \"latitud\": 8.7476,\n  \"longitud\": -76.6414,\n  \"tipo_ambiente_codigo\": \"marino\",\n  \"condicion_organismo_codigo\": \"vivo\",\n  \"notas\": \"Avistamiento cerca de la desembocadura del Atrato.\"\n}",
+                  "description": "JSON stringificado con los datos de la observación. Campos: `fecha_hora_evento` (ISO-8601 con offset), `latitud`, `longitud`, `tipo_ambiente_codigo`, `condicion_organismo_codigo`, opcionalmente `especie_id` (UUID) y `notas`."
+                },
+                {
+                  "key": "imagen",
+                  "type": "file",
+                  "src": [],
+                  "description": "Archivo JPEG o PNG (máx 10 MB). Antes de enviar: haz click en el valor del campo y adjunta una imagen desde tu máquina."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/observaciones",
+              "host": ["{{baseUrl}}"],
+              "path": ["observaciones"]
+            },
+            "description": "Crea una nueva observación en estado inicial `recibido`.\n\n**Body: `multipart/form-data`**\n\n- `datos` (text): JSON con los datos.\n- `imagen` (file): JPEG o PNG.\n\n**Respuesta esperada:** `201 Created` con `{ id, estado, creado_en, ... }`. El script de pruebas guarda `observacionId`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data && data.id) pm.environment.set(\"observacionId\", data.id);",
+                  "pm.test(\"Observación creada (201)\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Devuelve id\", () => pm.expect(data.id).to.be.a(\"string\"));",
+                  "pm.test(\"Estado inicial = recibido\", () => pm.expect(data.estado).to.eql(\"recibido\"));"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "GET /observaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/observaciones?pagina=1&tamano=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["observaciones"],
+              "query": [
+                { "key": "pagina", "value": "1", "description": "Número de página (≥ 1)." },
+                { "key": "tamano", "value": "20", "description": "Items por página (1–100)." },
+                { "key": "estado", "value": "recibido", "disabled": true, "description": "(Opcional) filtra por nombre de estado." }
+              ]
+            },
+            "description": "Lista paginada de observaciones. Un `usuario` ve solo las suyas; `admin` ve todas; `experto` ve las suyas (para la cola específica de pendientes usa el endpoint de la carpeta 04)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Tiene campo items (array)\", () => {",
+                  "  pm.expect(data).to.have.property(\"items\");",
+                  "  pm.expect(Array.isArray(data.items)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "GET /observaciones/{{observacionId}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/observaciones/{{observacionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["observaciones", "{{observacionId}}"]
+            },
+            "description": "Detalle completo de una observación: datos del evento, imagen (con URL firmada temporal), predicción del modelo, validación experta (si existe) e historial de estados.\n\nAutorización: el autor puede ver la suya; `experto` y `admin` pueden ver cualquiera."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Devuelve id de la observación\", () => pm.expect(data.id).to.be.a(\"string\"));",
+                  "pm.test(\"Incluye el campo prediccion (puede ser null si aún no ha corrido el modelo)\", () => {",
+                  "  pm.expect(data).to.have.property(\"prediccion\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "04 · Validación experta",
+      "description": "Cola de observaciones pendientes y registro de validación. Requiere rol `experto` o `administrador`.\n\nSi tu usuario no tiene ese rol, actualízalo en la BD:\n\n```sql\nUPDATE usuario SET rol = 'experto' WHERE correo = 'ana.torres@ejemplo.co';\n```\n\nLuego haz **Login** otra vez para que el nuevo rol quede en el token.",
+      "item": [
+        {
+          "name": "GET /observaciones/pendientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/observaciones/pendientes?pagina=1&tamano=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["observaciones", "pendientes"],
+              "query": [
+                { "key": "pagina", "value": "1" },
+                { "key": "tamano", "value": "20" }
+              ]
+            },
+            "description": "Cola de observaciones pendientes de validación experta. Requiere rol `experto` o `admin`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Tiene campo items (array)\", () => {",
+                  "  pm.expect(data).to.have.property(\"items\");",
+                  "  pm.expect(Array.isArray(data.items)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+
+        {
+          "name": "POST /observaciones/{{observacionId}}/validacion",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"confirmada\",\n  \"especie_final_codigo\": \"{{especieCodigo}}\",\n  \"comentario\": \"Coincide con las manchas y la forma del disco.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/observaciones/{{observacionId}}/validacion",
+              "host": ["{{baseUrl}}"],
+              "path": ["observaciones", "{{observacionId}}", "validacion"]
+            },
+            "description": "Registra la decisión del experto sobre una observación.\n\n**`decision`** debe ser una de:\n\n- `confirmada` → mantiene la especie que ya tenía (si tenía); `especie_final_codigo` opcional.\n- `corregida` → cambia la especie aceptada; `especie_final_codigo` **obligatorio**.\n- `rechazada` → anula la especie aceptada; `especie_final_codigo` opcional.\n\nMira la pestaña **Examples** para los tres casos."
+          },
+          "response": [
+            {
+              "name": "Ejemplo 1 — confirmada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"decision\": \"confirmada\",\n  \"especie_final_codigo\": \"{{especieCodigo}}\",\n  \"comentario\": \"Coincide con las manchas y la forma del disco.\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/observaciones/{{observacionId}}/validacion",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["observaciones", "{{observacionId}}", "validacion"]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\n  \"id\": \"5f3a1c20-aa11-4cde-9f3e-77bb12345678\",\n  \"decision\": \"confirmada\",\n  \"estado\": \"validado\",\n  \"especie_aceptada\": null,\n  \"creado_en\": \"2026-10-20T19:40:12.345Z\"\n}"
+            },
+            {
+              "name": "Ejemplo 2 — corregida",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"decision\": \"corregida\",\n  \"especie_final_codigo\": \"HYP_UNIC\",\n  \"comentario\": \"La predicción apuntaba a Urotrygon microphthalmum pero por la forma del hocico es Hypanus guttatus.\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/observaciones/{{observacionId}}/validacion",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["observaciones", "{{observacionId}}", "validacion"]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\n  \"id\": \"5f3a1c20-aa11-4cde-9f3e-77bb12345678\",\n  \"decision\": \"corregida\",\n  \"estado\": \"corregido\",\n  \"especie_aceptada\": {\n    \"id\": \"c1d2e3f4-5678-90ab-cdef-1234567890ab\",\n    \"nombre_cientifico\": \"Hypanus guttatus\",\n    \"nombre_comun\": \"Raya látigo\"\n  },\n  \"creado_en\": \"2026-10-20T19:42:55.678Z\"\n}"
+            },
+            {
+              "name": "Ejemplo 3 — rechazada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"decision\": \"rechazada\",\n  \"comentario\": \"La imagen está desenfocada y no permite identificar la especie con confianza.\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/observaciones/{{observacionId}}/validacion",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["observaciones", "{{observacionId}}", "validacion"]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\n  \"id\": \"5f3a1c20-aa11-4cde-9f3e-77bb12345678\",\n  \"decision\": \"rechazada\",\n  \"estado\": \"corregido\",\n  \"especie_aceptada\": null,\n  \"creado_en\": \"2026-10-20T19:45:03.912Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Validación registrada (201)\", () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Devuelve id y decision\", () => {",
+                  "  pm.expect(data.id).to.be.a(\"string\");",
+                  "  pm.expect([\"confirmada\",\"corregida\",\"rechazada\"]).to.include(data.decision);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
