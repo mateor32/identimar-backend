@@ -383,8 +383,8 @@
                 {
                   "key": "datos",
                   "type": "text",
-                  "value": "{\n  \"fecha_hora_evento\": \"2026-10-20T14:35:00-05:00\",\n  \"latitud\": 8.7476,\n  \"longitud\": -76.6414,\n  \"tipo_ambiente_codigo\": \"marino\",\n  \"condicion_organismo_codigo\": \"vivo\",\n  \"notas\": \"Avistamiento cerca de la desembocadura del Atrato.\"\n}",
-                  "description": "JSON stringificado con los datos de la observación. Campos: `fecha_hora_evento` (ISO-8601 con offset), `latitud`, `longitud`, `tipo_ambiente_codigo`, `condicion_organismo_codigo`, opcionalmente `especie_id` (UUID) y `notas`."
+                  "value": "{\n  \"fecha_hora_evento\": \"2026-10-20T14:35:00-05:00\",\n  \"latitud\": 8.7476,\n  \"longitud\": -76.6414,\n  \"precision_gps_metros\": 5.0,\n  \"tipo_ambiente_codigo\": \"estuarino\",\n  \"condicion_organismo_codigo\": \"liberado\",\n  \"observaciones_usuario\": \"Avistamiento cerca de la desembocadura del Atrato.\"\n}",
+                  "description": "JSON stringificado con los datos de la observación. Campos: `fecha_hora_evento` (ISO-8601 con offset), `latitud`, `longitud`, `tipo_ambiente_codigo`, `condicion_organismo_codigo`, opcionalmente `precision_gps_metros` (metros), `especie_aceptada_id` (UUID) y `observaciones_usuario` (texto libre, máx 1000 chars).\n\nLos códigos de `tipo_ambiente_codigo` y `condicion_organismo_codigo` deben existir en los catálogos (consulta `GET /catalogos/tipos-ambiente` y `GET /catalogos/condiciones-organismo` para ver los valores sembrados)."
                 },
                 {
                   "key": "imagen",

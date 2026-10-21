@@ -70,14 +70,14 @@ Los scripts de la pestaña **Tests** capturan tokens e IDs automáticamente — 
 
 Para que los requests funcionen **sin editar nada**, la colección usa los nombres de campo que el backend valida con Zod:
 
-| En la colección | Equivalente coloquial |
+| En la colección | Para qué sirve |
 |---|---|
-| `nombre_completo` | nombre completo del usuario |
-| `telefono` | teléfono (opcional) |
-| `tipo_ambiente_codigo` | tipo de ambiente |
-| `condicion_organismo_codigo` | condición del organismo |
-| `notas` | observaciones del usuario |
-
-El backend **no** acepta `precision_gps_metros`; si la app lo captura, descártalo antes de enviar.
+| `nombre_completo` | Nombre completo del usuario (registro). |
+| `telefono` | Teléfono del usuario (opcional, registro). |
+| `tipo_ambiente_codigo` | Código del tipo de ambiente (ver `GET /catalogos/tipos-ambiente`). |
+| `condicion_organismo_codigo` | Código de la condición del organismo (ver `GET /catalogos/condiciones-organismo`). |
+| `observaciones_usuario` | Texto libre con las notas del observador. |
+| `precision_gps_metros` | Precisión del GPS en metros (opcional). |
+| `especie_aceptada_id` | UUID de la especie sugerida por el usuario (opcional). El experto puede cambiarla al validar. |
 
 Roles reconocidos en la tabla `rol`: `usuario`, `experto`, `administrador` (no `admin`).

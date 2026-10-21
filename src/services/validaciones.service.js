@@ -122,7 +122,7 @@ async function registrarValidacion({
     // 5. INSERT validacion_experta. NUNCA tocamos la tabla prediccion.
     const { rows: valRows } = await client.query(
       `INSERT INTO validacion_experta (
-          observacion_id, usuario_id, decision_id, especie_id, nota
+          observacion_id, experto_id, decision_id, especie_final_id, comentario
        )
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, creado_en`,
@@ -156,7 +156,7 @@ async function registrarValidacion({
     // 7. Historial: estado_anterior → estado_nuevo.
     await client.query(
       `INSERT INTO historial_estado (
-          observacion_id, estado_anterior_id, estado_nuevo_id, usuario_id, nota
+          observacion_id, estado_anterior_id, estado_nuevo_id, actor_usuario_id, motivo
        )
        VALUES ($1, $2, $3, $4, $5)`,
       [

@@ -23,13 +23,20 @@ const crearObservacionSchema = z.object({
     .number({ invalid_type_error: 'longitud debe ser número' })
     .min(-180, 'longitud debe estar entre -180 y 180')
     .max(180, 'longitud debe estar entre -180 y 180'),
+  precision_gps_metros: z
+    .number({ invalid_type_error: 'precision_gps_metros debe ser número' })
+    .nonnegative('precision_gps_metros debe ser >= 0')
+    .optional(),
   fecha_hora_evento: z
     .string()
     .datetime({ offset: true, message: 'fecha_hora_evento debe ser ISO-8601 (eventDate)' }),
   tipo_ambiente_codigo: z.string().trim().min(1, 'tipo_ambiente_codigo es obligatorio'),
   condicion_organismo_codigo: z.string().trim().min(1, 'condicion_organismo_codigo es obligatorio'),
-  especie_id: z.string().uuid('especie_id debe ser un UUID').optional(),
-  notas: z.string().max(1000, 'notas no puede exceder 1000 caracteres').optional(),
+  especie_aceptada_id: z.string().uuid('especie_aceptada_id debe ser un UUID').optional(),
+  observaciones_usuario: z
+    .string()
+    .max(1000, 'observaciones_usuario no puede exceder 1000 caracteres')
+    .optional(),
 });
 
 function parsear(schema, data) {

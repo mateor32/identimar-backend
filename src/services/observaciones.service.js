@@ -63,15 +63,15 @@ async function crearObservacion({ usuario, datos, imagen }) {
         'condicion_organismo_codigo',
       );
 
-      // 2. Validar especie_id si el usuario la sugirió.
-      if (datos.especie_id) {
+      // 2. Validar especie_aceptada_id si el usuario la sugirió.
+      if (datos.especie_aceptada_id) {
         const { rowCount } = await client.query(
           `SELECT 1 FROM especie WHERE id = $1`,
-          [datos.especie_id],
+          [datos.especie_aceptada_id],
         );
         if (rowCount === 0) {
           throw new ValidacionError(`La especie sugerida no existe`, [
-            { campo: 'especie_id', mensaje: 'Id no reconocido' },
+            { campo: 'especie_aceptada_id', mensaje: 'Id no reconocido' },
           ]);
         }
       }
@@ -82,21 +82,23 @@ async function crearObservacion({ usuario, datos, imagen }) {
       // 4. INSERT observacion.
       const { rows: obsRows } = await client.query(
         `INSERT INTO observacion (
-            usuario_id, especie_id, tipo_ambiente_id, condicion_organismo_id,
-            estado_id, latitud, longitud, fecha_hora_evento, notas
+            usuario_id, especie_aceptada_id, tipo_ambiente_id, condicion_organismo_id,
+            estado_id, latitud, longitud, precision_gps_metros,
+            fecha_hora_evento, observaciones_usuario
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, creado_en`,
         [
           usuario.id,
-          datos.especie_id || null,
+          datos.especie_aceptada_id || null,
           tipoAmbienteId,
           condicionId,
           estadoId,
           datos.latitud,
           datos.longitud,
+          datos.precision_gps_metros ?? null,
           datos.fecha_hora_evento,
-          datos.notas || null,
+          datos.observaciones_usuario || null,
         ],
       );
       const observacion = obsRows[0];
@@ -111,14 +113,14 @@ async function crearObservacion({ usuario, datos, imagen }) {
       // 6. INSERT imagen. Si falla, el catch externo borra el archivo.
       await client.query(
         `INSERT INTO imagen (
-            observacion_id, url_storage, mime, bytes,
-            ancho_px, alto_px, checksum_sha256
+            observacion_id, url_storage, formato, tamano_bytes,
+            ancho_px, alto_px, checksum, orden
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
         [
           observacion.id,
           path,
-          imagen.mimetype,
+          ext,
           imagen.size,
           imagen.width,
           imagen.height,
@@ -129,7 +131,7 @@ async function crearObservacion({ usuario, datos, imagen }) {
       // 7. Historial: null → recibido.
       await client.query(
         `INSERT INTO historial_estado (
-            observacion_id, estado_anterior_id, estado_nuevo_id, usuario_id, nota
+            observacion_id, estado_anterior_id, estado_nuevo_id, actor_usuario_id, motivo
          )
          VALUES ($1, NULL, $2, $3, $4)`,
         [observacion.id, estadoId, usuario.id, 'Observación creada'],
@@ -196,10 +198,10 @@ async function listarObservaciones({ filtroUsuarioId, estadoNombre, pagina, tama
         json_build_object('id', e.id, 'codigo', e.codigo, 'nombre_visible', e.nombre_visible, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
         CASE WHEN sp.id IS NOT NULL
              THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
-        END AS especie_sugerida
+        END AS especie_aceptada
      FROM observacion o
      JOIN estado_observacion e ON e.id = o.estado_id
-     LEFT JOIN especie sp ON sp.id = o.especie_id
+     LEFT JOIN especie sp ON sp.id = o.especie_aceptada_id
      ${whereClause}
      ORDER BY o.creado_en DESC
      LIMIT $3 OFFSET $4`,
@@ -237,14 +239,14 @@ async function listarPendientes({ pagina, tamano }) {
         json_build_object('id', e.id, 'codigo', e.codigo, 'nombre_visible', e.nombre_visible, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
         CASE WHEN sp.id IS NOT NULL
              THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
-        END AS especie_sugerida,
+        END AS especie_aceptada,
         json_build_object('id', u.id, 'nombre_completo', u.nombre_completo, 'rol', ur.codigo) AS usuario,
-        (SELECT json_build_object('id', p.id, 'score', p.score,
+        (SELECT json_build_object('id', p.id, 'confianza', p.confianza,
                  'especie', CASE WHEN psp.id IS NOT NULL
                    THEN json_build_object('id', psp.id, 'codigo', psp.codigo, 'nombre_cientifico', psp.nombre_cientifico, 'nombre_comun', psp.nombre_comun)
                  END)
          FROM prediccion p
-         LEFT JOIN especie psp ON psp.id = p.especie_id
+         LEFT JOIN especie psp ON psp.id = p.especie_propuesta_id
          WHERE p.observacion_id = o.id
          ORDER BY p.creado_en DESC
          LIMIT 1) AS prediccion
@@ -252,7 +254,7 @@ async function listarPendientes({ pagina, tamano }) {
      JOIN estado_observacion e ON e.id = o.estado_id
      JOIN usuario u ON u.id = o.usuario_id
      JOIN rol ur ON ur.id = u.rol_id
-     LEFT JOIN especie sp ON sp.id = o.especie_id
+     LEFT JOIN especie sp ON sp.id = o.especie_aceptada_id
      WHERE e.codigo = ANY($1::text[])
      ORDER BY o.creado_en ASC
      LIMIT $2 OFFSET $3`,
@@ -278,7 +280,8 @@ async function obtenerObservacionCompleta(id) {
         o.latitud,
         o.longitud,
         o.fecha_hora_evento,
-        o.notas,
+        o.precision_gps_metros,
+        o.observaciones_usuario,
         o.creado_en,
         o.usuario_id,
         json_build_object('id', e.id, 'codigo', e.codigo, 'nombre_visible', e.nombre_visible, 'orden', e.orden, 'es_terminal', e.es_terminal) AS estado,
@@ -286,7 +289,7 @@ async function obtenerObservacionCompleta(id) {
         json_build_object('id', co.id, 'codigo', co.codigo, 'nombre_visible', co.nombre_visible) AS condicion_organismo,
         CASE WHEN sp.id IS NOT NULL
              THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
-        END AS especie_sugerida,
+        END AS especie_aceptada,
         json_build_object('id', u.id, 'nombre_completo', u.nombre_completo, 'correo', u.correo, 'rol', ur.codigo) AS usuario
      FROM observacion o
      JOIN estado_observacion e ON e.id = o.estado_id
@@ -294,7 +297,7 @@ async function obtenerObservacionCompleta(id) {
      JOIN condicion_organismo co ON co.id = o.condicion_organismo_id
      JOIN usuario u ON u.id = o.usuario_id
      JOIN rol ur ON ur.id = u.rol_id
-     LEFT JOIN especie sp ON sp.id = o.especie_id
+     LEFT JOIN especie sp ON sp.id = o.especie_aceptada_id
      WHERE o.id = $1`,
     [id],
   );
@@ -303,10 +306,10 @@ async function obtenerObservacionCompleta(id) {
 
   // 2. Imagen (asumimos una por observación en la v1 del contrato).
   const { rows: imgRows } = await query(
-    `SELECT id, url_storage, mime, bytes, ancho_px, alto_px, checksum_sha256, creado_en
+    `SELECT id, url_storage, formato, tamano_bytes, ancho_px, alto_px, checksum, orden, subido_en
      FROM imagen
      WHERE observacion_id = $1
-     ORDER BY creado_en ASC
+     ORDER BY orden ASC, subido_en ASC
      LIMIT 1`,
     [id],
   );
@@ -316,16 +319,16 @@ async function obtenerObservacionCompleta(id) {
   const { rows: predRows } = await query(
     `SELECT
         p.id,
-        p.score,
+        p.confianza,
         p.creado_en,
         CASE WHEN sp.id IS NOT NULL
              THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
         END AS especie,
         CASE WHEN vm.id IS NOT NULL
-             THEN json_build_object('id', vm.id, 'nombre', vm.nombre)
+             THEN json_build_object('id', vm.id, 'version', vm.version)
         END AS version_modelo
      FROM prediccion p
-     LEFT JOIN especie sp ON sp.id = p.especie_id
+     LEFT JOIN especie sp ON sp.id = p.especie_propuesta_id
      LEFT JOIN version_modelo vm ON vm.id = p.version_modelo_id
      WHERE p.observacion_id = $1
      ORDER BY p.creado_en DESC
@@ -338,7 +341,7 @@ async function obtenerObservacionCompleta(id) {
   const { rows: valRows } = await query(
     `SELECT
         v.id,
-        v.nota,
+        v.comentario,
         v.creado_en,
         json_build_object('id', u.id, 'nombre_completo', u.nombre_completo, 'correo', u.correo, 'rol', ur.codigo) AS experto,
         json_build_object('id', d.id, 'codigo', d.codigo, 'nombre_visible', d.nombre_visible) AS decision,
@@ -346,10 +349,10 @@ async function obtenerObservacionCompleta(id) {
              THEN json_build_object('id', sp.id, 'codigo', sp.codigo, 'nombre_cientifico', sp.nombre_cientifico, 'nombre_comun', sp.nombre_comun)
         END AS especie_corregida
      FROM validacion_experta v
-     JOIN usuario u ON u.id = v.usuario_id
+     JOIN usuario u ON u.id = v.experto_id
      JOIN rol ur ON ur.id = u.rol_id
      JOIN decision_validacion d ON d.id = v.decision_id
-     LEFT JOIN especie sp ON sp.id = v.especie_id
+     LEFT JOIN especie sp ON sp.id = v.especie_final_id
      WHERE v.observacion_id = $1
      ORDER BY v.creado_en DESC
      LIMIT 1`,
@@ -361,22 +364,22 @@ async function obtenerObservacionCompleta(id) {
   const { rows: historial } = await query(
     `SELECT
         h.id,
-        h.nota,
-        h.ocurrido_en,
+        h.motivo,
+        h.creado_en,
         CASE WHEN ea.id IS NOT NULL
              THEN json_build_object('id', ea.id, 'codigo', ea.codigo, 'nombre_visible', ea.nombre_visible)
         END AS estado_anterior,
         json_build_object('id', en.id, 'codigo', en.codigo, 'nombre_visible', en.nombre_visible) AS estado_nuevo,
         CASE WHEN u.id IS NOT NULL
              THEN json_build_object('id', u.id, 'nombre_completo', u.nombre_completo, 'rol', ur.codigo)
-        END AS usuario
+        END AS actor
      FROM historial_estado h
      LEFT JOIN estado_observacion ea ON ea.id = h.estado_anterior_id
      JOIN estado_observacion en ON en.id = h.estado_nuevo_id
-     LEFT JOIN usuario u ON u.id = h.usuario_id
+     LEFT JOIN usuario u ON u.id = h.actor_usuario_id
      LEFT JOIN rol ur ON ur.id = u.rol_id
      WHERE h.observacion_id = $1
-     ORDER BY h.ocurrido_en ASC, h.id ASC`,
+     ORDER BY h.creado_en ASC, h.id ASC`,
     [id],
   );
 
