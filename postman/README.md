@@ -47,8 +47,10 @@ Los scripts de la pestaña **Tests** capturan tokens e IDs automáticamente — 
 - Para probar `GET /observaciones/pendientes` y `POST /observaciones/:id/validacion`, actualiza el rol en la BD:
 
   ```sql
-  UPDATE usuario SET rol = 'experto' WHERE correo = 'ana.torres@ejemplo.co';
-  -- o 'admin'
+  UPDATE usuario
+  SET rol_id = (SELECT id FROM rol WHERE codigo = 'experto')
+  WHERE correo = 'ana.torres@ejemplo.co';
+  -- también sirve 'administrador'
   ```
 
 - Después haz **Login** de nuevo para que el nuevo rol quede en el payload del JWT.
@@ -70,9 +72,12 @@ Para que los requests funcionen **sin editar nada**, la colección usa los nombr
 
 | En la colección | Equivalente coloquial |
 |---|---|
-| `nombre` | nombre completo |
+| `nombre_completo` | nombre completo del usuario |
+| `telefono` | teléfono (opcional) |
 | `tipo_ambiente_codigo` | tipo de ambiente |
 | `condicion_organismo_codigo` | condición del organismo |
 | `notas` | observaciones del usuario |
 
 El backend **no** acepta `precision_gps_metros`; si la app lo captura, descártalo antes de enviar.
+
+Roles reconocidos en la tabla `rol`: `usuario`, `experto`, `administrador` (no `admin`).

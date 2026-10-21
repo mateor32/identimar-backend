@@ -42,7 +42,7 @@ const PNG_BUFFER = Buffer.from(
 
 const USUARIO = { id: '11111111-1111-1111-1111-111111111111', correo: 'ana@uraba.co', rol: 'usuario' };
 const EXPERTO = { id: '22222222-2222-2222-2222-222222222222', correo: 'exp@uraba.co', rol: 'experto' };
-const ADMIN = { id: '33333333-3333-3333-3333-333333333333', correo: 'adm@uraba.co', rol: 'admin' };
+const ADMIN = { id: '33333333-3333-3333-3333-333333333333', correo: 'adm@uraba.co', rol: 'administrador' };
 
 function tokenPara(user) {
   return jwt.sign({ sub: user.id, correo: user.correo, rol: user.rol, type: 'access' },
@@ -258,11 +258,11 @@ function fixtureDetalle({ autorId = USUARIO.id } = {}) {
       fecha_hora_evento: '2026-10-08T14:30:00Z',
       notas: null,
       creado_en: '2026-10-08T14:30:05.000Z',
-      estado: { id: 'est-1', nombre: 'recibido', orden: 1, es_terminal: false },
-      tipo_ambiente: { id: 'amb-1', nombre: 'Manglar' },
-      condicion_organismo: { id: 'cond-1', nombre: 'Viva' },
+      estado: { id: 'est-1', codigo: 'recibido', nombre_visible: 'Recibido', orden: 1, es_terminal: false },
+      tipo_ambiente: { id: 'amb-1', codigo: 'manglar', nombre_visible: 'Manglar' },
+      condicion_organismo: { id: 'cond-1', codigo: 'viva', nombre_visible: 'Viva' },
       especie_sugerida: null,
-      usuario: { id: autorId, nombre: 'Ana', correo: 'ana@uraba.co', rol: 'usuario' },
+      usuario: { id: autorId, nombre_completo: 'Ana', correo: 'ana@uraba.co', rol: 'usuario' },
     },
     imagen: {
       id: 'img-1',
@@ -280,8 +280,8 @@ function fixtureDetalle({ autorId = USUARIO.id } = {}) {
       {
         id: 'h-1',
         estado_anterior: null,
-        estado_nuevo: { id: 'est-1', nombre: 'recibido' },
-        usuario: { id: autorId, nombre: 'Ana', rol: 'usuario' },
+        estado_nuevo: { id: 'est-1', codigo: 'recibido', nombre_visible: 'Recibido' },
+        usuario: { id: autorId, nombre_completo: 'Ana', rol: 'usuario' },
         nota: 'Observación creada',
         ocurrido_en: '2026-10-08T14:30:05.000Z',
       },
@@ -299,7 +299,7 @@ describe('GET /api/v1/observaciones/:id', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('obs-detalle-1');
-    expect(res.body.estado).toMatchObject({ nombre: 'recibido' });
+    expect(res.body.estado).toMatchObject({ codigo: 'recibido' });
     expect(res.body.imagen).toMatchObject({
       url_firmada: 'https://signed/observaciones/obs-detalle-1.png?sig=xyz',
       url_expira_en: 3600,

@@ -35,7 +35,7 @@ const app = require('../src/app');
 
 const USUARIO = { id: 'uuid-user', correo: 'u@u.co', rol: 'usuario' };
 const EXPERTO = { id: 'uuid-exp', correo: 'e@e.co', rol: 'experto' };
-const ADMIN = { id: 'uuid-adm', correo: 'a@a.co', rol: 'admin' };
+const ADMIN = { id: 'uuid-adm', correo: 'a@a.co', rol: 'administrador' };
 
 function tokenPara(user) {
   return jwt.sign(

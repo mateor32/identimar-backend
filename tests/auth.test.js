@@ -29,12 +29,13 @@ jest.mock('../src/services/auth.service', () => {
       return null;
     }),
 
-    crearUsuario: jest.fn(async ({ nombre, correo, passwordHash }) => {
+    crearUsuario: jest.fn(async ({ nombreCompleto, correo, passwordHash, telefono }) => {
       const registro = {
         id: `uuid-${usuarios.size + 1}`,
-        nombre,
+        nombre_completo: nombreCompleto,
         correo: correo.toLowerCase(),
         password_hash: passwordHash,
+        telefono: telefono || null,
         rol: 'usuario',
         activo: true,
         creado_en: new Date().toISOString(),
@@ -58,7 +59,7 @@ beforeEach(() => {
 describe('POST /api/v1/auth/registro', () => {
   test('registra un usuario y devuelve 201 sin token', async () => {
     const res = await request(app).post('/api/v1/auth/registro').send({
-      nombre: 'Ana Pescadora',
+      nombre_completo: 'Ana Pescadora',
       correo: 'ana@uraba.co',
       password: 'claveSegura123',
     });
@@ -66,7 +67,7 @@ describe('POST /api/v1/auth/registro', () => {
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('usuario');
     expect(res.body.usuario).toMatchObject({
-      nombre: 'Ana Pescadora',
+      nombre_completo: 'Ana Pescadora',
       correo: 'ana@uraba.co',
       rol: 'usuario',
       activo: true,
@@ -77,7 +78,7 @@ describe('POST /api/v1/auth/registro', () => {
 
   test('rechaza correo duplicado con 409', async () => {
     const base = {
-      nombre: 'Ana Pescadora',
+      nombre_completo: 'Ana Pescadora',
       correo: 'ana@uraba.co',
       password: 'claveSegura123',
     };
@@ -90,7 +91,7 @@ describe('POST /api/v1/auth/registro', () => {
 
   test('rechaza payload inválido con 400', async () => {
     const res = await request(app).post('/api/v1/auth/registro').send({
-      nombre: 'A',
+      nombre_completo: 'A',
       correo: 'no-es-correo',
       password: 'corta',
     });
@@ -102,7 +103,7 @@ describe('POST /api/v1/auth/registro', () => {
 
 describe('POST /api/v1/auth/login', () => {
   const credenciales = {
-    nombre: 'Ana Pescadora',
+    nombre_completo: 'Ana Pescadora',
     correo: 'ana@uraba.co',
     password: 'claveSegura123',
   };
@@ -143,7 +144,7 @@ describe('GET /api/v1/auth/perfil', () => {
   test('con token válido devuelve el usuario; sin token responde 401', async () => {
     await request(app)
       .post('/api/v1/auth/registro')
-      .send({ nombre: 'Ana Pescadora', correo: 'ana@uraba.co', password: 'claveSegura123' })
+      .send({ nombre_completo: 'Ana Pescadora', correo: 'ana@uraba.co', password: 'claveSegura123' })
       .expect(201);
 
     const login = await request(app)

@@ -20,7 +20,7 @@ router.get('/', requireAuth, wrap(observacionesController.listar));
 router.get(
   '/pendientes',
   requireAuth,
-  requireRole('experto', 'admin'),
+  requireRole('experto', 'administrador'),
   wrap(observacionesController.pendientes),
 );
 
@@ -31,7 +31,7 @@ router.get('/:id', requireAuth, wrap(observacionesController.detalle));
 router.post(
   '/:id/validacion',
   requireAuth,
-  requireRole('experto', 'admin'),
+  requireRole('experto', 'administrador'),
   wrap(observacionesController.registrarValidacion),
 );
 

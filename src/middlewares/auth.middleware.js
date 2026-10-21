@@ -38,7 +38,7 @@ function requireAuth(req, _res, next) {
 /**
  * Middleware factory. Autoriza solo si el rol del usuario está entre los permitidos.
  * Debe usarse DESPUÉS de requireAuth.
- *   router.get('/x', requireAuth, requireRole('experto', 'admin'), handler)
+ *   router.get('/x', requireAuth, requireRole('experto', 'administrador'), handler)
  */
 function requireRole(...rolesPermitidos) {
   return (req, _res, next) => {

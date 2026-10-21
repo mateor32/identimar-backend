@@ -132,7 +132,7 @@ async function listar(req, res) {
   const { estado, pagina, tamano } = parsear(listarQuerySchema, req.query);
 
   // Un admin ve todo; cualquier otro rol ve solo lo suyo.
-  const filtroUsuarioId = req.usuario.rol === 'admin' ? null : req.usuario.id;
+  const filtroUsuarioId = req.usuario.rol === 'administrador' ? null : req.usuario.id;
 
   const resultado = await observacionesService.listarObservaciones({
     filtroUsuarioId,
@@ -154,9 +154,9 @@ async function detalle(req, res) {
     throw new NoEncontradoError('Observación no encontrada');
   }
 
-  // Autorización: 'usuario' solo ve lo suyo; 'experto' y 'admin' pueden ver todo.
+  // Autorización: 'usuario' solo ve lo suyo; 'experto' y 'administrador' pueden ver todo.
   const esAutor = completa.observacion.usuario_id === req.usuario.id;
-  const tieneAccesoAmplio = ['experto', 'admin'].includes(req.usuario.rol);
+  const tieneAccesoAmplio = ['experto', 'administrador'].includes(req.usuario.rol);
   if (!esAutor && !tieneAccesoAmplio) {
     throw new SinPermisoError('No puedes acceder a esta observación');
   }

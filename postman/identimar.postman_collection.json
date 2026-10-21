@@ -68,14 +68,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Ana Torres\",\n  \"correo\": \"ana.torres@ejemplo.co\",\n  \"password\": \"MiClave2026!\"\n}"
+              "raw": "{\n  \"nombre_completo\": \"Ana Torres\",\n  \"correo\": \"ana.torres@ejemplo.co\",\n  \"password\": \"MiClave2026!\",\n  \"telefono\": \"+573001234567\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/registro",
               "host": ["{{baseUrl}}"],
               "path": ["auth", "registro"]
             },
-            "description": "Crea una nueva cuenta de usuario (rol por defecto: `usuario`). No devuelve token — tras registrarse hay que hacer login.\n\n**Body (JSON):**\n- `nombre` (string, 2–120 chars)\n- `correo` (string, email válido)\n- `password` (string, 8–72 chars)\n\n**Respuesta esperada:** `201 Created` con `{ usuario: { id, nombre, correo, rol, activo, creado_en } }`."
+            "description": "Crea una nueva cuenta de usuario (rol por defecto: `usuario`). No devuelve token — tras registrarse hay que hacer login.\n\n**Body (JSON):**\n- `nombre_completo` (string, 2–120 chars)\n- `correo` (string, email válido)\n- `password` (string, 8–72 chars)\n- `telefono` (string, opcional, máx 30 chars)\n\n**Respuesta esperada:** `201 Created` con `{ usuario: { id, nombre_completo, correo, telefono, rol, activo, creado_en } }`."
           },
           "response": [],
           "event": [
@@ -490,7 +490,7 @@
 
     {
       "name": "04 · Validación experta",
-      "description": "Cola de observaciones pendientes y registro de validación. Requiere rol `experto` o `administrador`.\n\nSi tu usuario no tiene ese rol, actualízalo en la BD:\n\n```sql\nUPDATE usuario SET rol = 'experto' WHERE correo = 'ana.torres@ejemplo.co';\n```\n\nLuego haz **Login** otra vez para que el nuevo rol quede en el token.",
+      "description": "Cola de observaciones pendientes y registro de validación. Requiere rol `experto` o `administrador`.\n\nSi tu usuario no tiene ese rol, actualízalo en la BD (`rol_id` apunta a la tabla `rol`):\n\n```sql\nUPDATE usuario\nSET rol_id = (SELECT id FROM rol WHERE codigo = 'experto')\nWHERE correo = 'ana.torres@ejemplo.co';\n```\n\nLuego haz **Login** otra vez para que el nuevo rol quede en el token.",
       "item": [
         {
           "name": "GET /observaciones/pendientes",

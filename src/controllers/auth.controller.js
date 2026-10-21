@@ -19,12 +19,13 @@ const {
 // ---- Schemas Zod -----------------------------------------------------------
 
 const registroSchema = z.object({
-  nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres').max(120),
+  nombre_completo: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres').max(120),
   correo: z.string().trim().toLowerCase().email('El correo no es válido'),
   password: z
     .string()
     .min(8, 'La contraseña debe tener al menos 8 caracteres')
     .max(72, 'La contraseña no puede exceder 72 caracteres'), // límite de bcrypt
+  telefono: z.string().trim().max(30, 'telefono no puede exceder 30 caracteres').optional(),
 });
 
 const loginSchema = z.object({
@@ -67,9 +68,10 @@ async function registro(req, res) {
 
   const passwordHash = await hashPassword(datos.password);
   const usuario = await authService.crearUsuario({
-    nombre: datos.nombre,
+    nombreCompleto: datos.nombre_completo,
     correo: datos.correo,
     passwordHash,
+    telefono: datos.telefono,
   });
 
   res.status(201).json({ usuario });

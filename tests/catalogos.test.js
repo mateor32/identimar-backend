@@ -9,42 +9,42 @@ process.env.DATABASE_URL = 'postgres://no-usado-en-tests';
 // viven DENTRO de la factory (no podemos referenciar consts externas aquí).
 jest.mock('../src/services/catalogos.service', () => {
   const FAMILIAS = [
-    { id: 'fam-1', nombre: 'Dasyatidae' },
-    { id: 'fam-2', nombre: 'Myliobatidae' },
-    { id: 'fam-3', nombre: 'Rhinopteridae' },
-    { id: 'fam-4', nombre: 'Urotrygonidae' },
-    { id: 'fam-5', nombre: 'Narcinidae' },
+    { id: 'fam-1', nombre_cientifico: 'Dasyatidae' },
+    { id: 'fam-2', nombre_cientifico: 'Myliobatidae' },
+    { id: 'fam-3', nombre_cientifico: 'Rhinopteridae' },
+    { id: 'fam-4', nombre_cientifico: 'Urotrygonidae' },
+    { id: 'fam-5', nombre_cientifico: 'Narcinidae' },
   ];
   const ESPECIES = [
-    { id: 'esp-1', nombre_cientifico: 'Hypanus guttatus', nombre_comun: 'Raya látigo', familia: FAMILIAS[0] },
-    { id: 'esp-2', nombre_cientifico: 'Hypanus americanus', nombre_comun: 'Raya látigo americana', familia: FAMILIAS[0] },
-    { id: 'esp-3', nombre_cientifico: 'Aetobatus narinari', nombre_comun: 'Raya águila', familia: FAMILIAS[1] },
-    { id: 'esp-4', nombre_cientifico: 'Rhinoptera bonasus', nombre_comun: 'Raya diablo', familia: FAMILIAS[2] },
-    { id: 'esp-5', nombre_cientifico: 'Narcine bancroftii', nombre_comun: 'Raya eléctrica', familia: FAMILIAS[4] },
+    { id: 'esp-1', codigo: 'HYP_GUT', nombre_cientifico: 'Hypanus guttatus', nombre_comun: 'Raya látigo', familia: FAMILIAS[0] },
+    { id: 'esp-2', codigo: 'HYP_AME', nombre_cientifico: 'Hypanus americanus', nombre_comun: 'Raya látigo americana', familia: FAMILIAS[0] },
+    { id: 'esp-3', codigo: 'AET_NAR', nombre_cientifico: 'Aetobatus narinari', nombre_comun: 'Raya águila', familia: FAMILIAS[1] },
+    { id: 'esp-4', codigo: 'RHI_BON', nombre_cientifico: 'Rhinoptera bonasus', nombre_comun: 'Raya diablo', familia: FAMILIAS[2] },
+    { id: 'esp-5', codigo: 'NAR_BAN', nombre_cientifico: 'Narcine bancroftii', nombre_comun: 'Raya eléctrica', familia: FAMILIAS[4] },
   ];
   const TIPOS_AMBIENTE = [
-    { id: 'amb-1', nombre: 'Playa arenosa' },
-    { id: 'amb-2', nombre: 'Estuario' },
-    { id: 'amb-3', nombre: 'Manglar' },
-    { id: 'amb-4', nombre: 'Zona rocosa' },
-    { id: 'amb-5', nombre: 'Arrecife' },
-    { id: 'amb-6', nombre: 'Mar abierto' },
+    { id: 'amb-1', codigo: 'playa_arenosa', nombre_visible: 'Playa arenosa' },
+    { id: 'amb-2', codigo: 'estuario', nombre_visible: 'Estuario' },
+    { id: 'amb-3', codigo: 'manglar', nombre_visible: 'Manglar' },
+    { id: 'amb-4', codigo: 'zona_rocosa', nombre_visible: 'Zona rocosa' },
+    { id: 'amb-5', codigo: 'arrecife', nombre_visible: 'Arrecife' },
+    { id: 'amb-6', codigo: 'mar_abierto', nombre_visible: 'Mar abierto' },
   ];
   const CONDICIONES = [
-    { id: 'cond-1', nombre: 'Viva' },
-    { id: 'cond-2', nombre: 'Muerta' },
-    { id: 'cond-3', nombre: 'Capturada' },
-    { id: 'cond-4', nombre: 'Liberada' },
-    { id: 'cond-5', nombre: 'Desconocida' },
+    { id: 'cond-1', codigo: 'viva', nombre_visible: 'Viva' },
+    { id: 'cond-2', codigo: 'muerta', nombre_visible: 'Muerta' },
+    { id: 'cond-3', codigo: 'capturada', nombre_visible: 'Capturada' },
+    { id: 'cond-4', codigo: 'liberada', nombre_visible: 'Liberada' },
+    { id: 'cond-5', codigo: 'desconocida', nombre_visible: 'Desconocida' },
   ];
   const ESTADOS = [
-    { id: 'est-1', nombre: 'recibido', orden: 1, es_terminal: false },
-    { id: 'est-2', nombre: 'procesando', orden: 2, es_terminal: false },
-    { id: 'est-3', nombre: 'identificado', orden: 3, es_terminal: false },
-    { id: 'est-4', nombre: 'no_concluyente', orden: 4, es_terminal: false },
-    { id: 'est-5', nombre: 'pendiente_experto', orden: 5, es_terminal: false },
-    { id: 'est-6', nombre: 'validado', orden: 6, es_terminal: true },
-    { id: 'est-7', nombre: 'corregido', orden: 7, es_terminal: true },
+    { id: 'est-1', codigo: 'recibido', nombre_visible: 'Recibido', orden: 1, es_terminal: false },
+    { id: 'est-2', codigo: 'procesando', nombre_visible: 'Procesando', orden: 2, es_terminal: false },
+    { id: 'est-3', codigo: 'identificado', nombre_visible: 'Identificado', orden: 3, es_terminal: false },
+    { id: 'est-4', codigo: 'no_concluyente', nombre_visible: 'No concluyente', orden: 4, es_terminal: false },
+    { id: 'est-5', codigo: 'pendiente_experto', nombre_visible: 'Pendiente experto', orden: 5, es_terminal: false },
+    { id: 'est-6', codigo: 'validado', nombre_visible: 'Validado', orden: 6, es_terminal: true },
+    { id: 'est-7', codigo: 'corregido', nombre_visible: 'Corregido', orden: 7, es_terminal: true },
   ];
 
   return {
@@ -74,7 +74,7 @@ describe('GET /api/v1/catalogos/*', () => {
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body).toHaveLength(5);
     expect(res.body[0]).toHaveProperty('familia');
-    expect(res.body[0].familia).toMatchObject({ id: expect.any(String), nombre: expect.any(String) });
+    expect(res.body[0].familia).toMatchObject({ id: expect.any(String), nombre_cientifico: expect.any(String) });
   });
 
   test('GET /familias devuelve 5 familias', async () => {
@@ -103,7 +103,7 @@ describe('GET /api/v1/catalogos/*', () => {
     // Vienen ordenados por `orden`.
     expect(res.body.map((e) => e.orden)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     // Terminales declarados.
-    const terminales = res.body.filter((e) => e.es_terminal).map((e) => e.nombre);
+    const terminales = res.body.filter((e) => e.es_terminal).map((e) => e.codigo);
     expect(terminales.sort()).toEqual(['corregido', 'validado']);
   });
 
