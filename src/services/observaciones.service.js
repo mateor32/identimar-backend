@@ -2,6 +2,7 @@ const { query, withTransaction } = require('../config/database');
 const supabase = require('../config/supabase');
 const { ValidacionError, NoEncontradoError } = require('../utils/errors');
 const { extensionDeMime } = require('../middlewares/upload.middleware');
+const visionService = require('./vision.service');
 
 /**
  * Resuelve el id de una fila de catálogo a partir de una columna "código".
@@ -47,8 +48,9 @@ async function crearObservacion({ usuario, datos, imagen }) {
   // compensar si la BD falla después del upload (orphan file prevention).
   let pathSubido = null;
 
+  let base;
   try {
-    return await withTransaction(async (client) => {
+    base = await withTransaction(async (client) => {
       // 1. Resolver FKs desde códigos legibles.
       const tipoAmbienteId = await resolverIdPorCodigo(
         client,
@@ -111,12 +113,14 @@ async function crearObservacion({ usuario, datos, imagen }) {
       pathSubido = path;
 
       // 6. INSERT imagen. Si falla, el catch externo borra el archivo.
-      await client.query(
+      //    Necesitamos el id porque luego lo referencia prediccion.imagen_id.
+      const { rows: imgRows } = await client.query(
         `INSERT INTO imagen (
             observacion_id, url_storage, formato, tamano_bytes,
             ancho_px, alto_px, checksum, orden
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
+         RETURNING id`,
         [
           observacion.id,
           path,
@@ -127,6 +131,7 @@ async function crearObservacion({ usuario, datos, imagen }) {
           imagen.checksum,
         ],
       );
+      const imagenId = imgRows[0].id;
 
       // 7. Historial: null → recibido.
       await client.query(
@@ -139,7 +144,8 @@ async function crearObservacion({ usuario, datos, imagen }) {
 
       return {
         id: observacion.id,
-        estado: 'recibido',
+        imagenId,
+        imagenPath: path,
         creado_en: observacion.creado_en,
       };
     });
@@ -151,6 +157,192 @@ async function crearObservacion({ usuario, datos, imagen }) {
     }
     throw err;
   }
+
+  // La observación ya está en BD en estado 'recibido'. Ahora llamamos al
+  // modelo de visión, guardamos la predicción y transicionamos de estado.
+  // Si algo falla aquí, la observación NO se borra: queda en 'no_concluyente'
+  // para que un experto la revise, en línea con la máquina de estados.
+  const estadoFinal = await procesarInferencia({
+    observacionId: base.id,
+    imagenId: base.imagenId,
+    imagenPath: base.imagenPath,
+    usuarioId: usuario.id,
+  });
+
+  return {
+    id: base.id,
+    estado: estadoFinal,
+    creado_en: base.creado_en,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Integración con el servicio de visión del Equipo 2
+// ---------------------------------------------------------------------------
+
+/**
+ * Orquesta el flujo post-creación:
+ *   1. Pide inferencia al servicio de visión.
+ *   2a. Éxito  → INSERT prediccion + transición a identificado | pendiente_experto.
+ *   2b. Fallo  → transición a no_concluyente (sin romper la respuesta al cliente).
+ *
+ * Devuelve el código del estado final en el que quedó la observación.
+ */
+async function procesarInferencia({ observacionId, imagenId, imagenPath, usuarioId }) {
+  let inferencia;
+  try {
+    inferencia = await visionService.solicitarInferencia(observacionId, imagenPath);
+  } catch (err) {
+    const esServicioCaido = err && err.message === 'SERVICIO_VISION_NO_DISPONIBLE';
+    const motivo = esServicioCaido
+      ? 'Servicio de visión no disponible'
+      : `Error de visión: ${err?.message || 'desconocido'}`;
+    if (!esServicioCaido) {
+      // 401 / 5xx del equipo de IA, bug nuestro, etc. No propagamos (la
+      // observación ya existe), pero sí lo registramos para alertas.
+      // eslint-disable-next-line no-console
+      console.error('[vision] fallo inesperado:', err);
+    }
+    return transicionarEstado({
+      observacionId,
+      codigoNuevo: 'no_concluyente',
+      actorId: usuarioId,
+      motivo,
+    });
+  }
+
+  return aplicarInferenciaExitosa({ observacionId, imagenId, usuarioId, inferencia });
+}
+
+/**
+ * Transición simple de estado + historial. Usada cuando no hubo predicción
+ * (visión caída) y hay que mover la observación a 'no_concluyente'.
+ */
+async function transicionarEstado({ observacionId, codigoNuevo, actorId, motivo }) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT estado_id FROM observacion WHERE id = $1 FOR UPDATE`,
+      [observacionId],
+    );
+    if (!rows[0]) {
+      throw new NoEncontradoError('Observación no encontrada al transicionar estado');
+    }
+    const estadoAnteriorId = rows[0].estado_id;
+    const estadoNuevoId = await obtenerEstadoIdPorCodigo(client, codigoNuevo);
+
+    await client.query(
+      `UPDATE observacion SET estado_id = $1 WHERE id = $2`,
+      [estadoNuevoId, observacionId],
+    );
+    await client.query(
+      `INSERT INTO historial_estado (
+          observacion_id, estado_anterior_id, estado_nuevo_id, actor_usuario_id, motivo
+       )
+       VALUES ($1, $2, $3, $4, $5)`,
+      [observacionId, estadoAnteriorId, estadoNuevoId, actorId, motivo],
+    );
+    return codigoNuevo;
+  });
+}
+
+/**
+ * Inserta la predicción (append-only), decide el estado destino y lo aplica.
+ *
+ * Reglas:
+ *   estado_vision = 'identificado' + especie sembrada → 'identificado' + especie_aceptada_id.
+ *   estado_vision = 'identificado' + especie DESCONOCIDA → 'pendiente_experto' (prediccion con especie_propuesta_id = NULL).
+ *   estado_vision = 'no_concluyente'                   → 'pendiente_experto'.
+ */
+async function aplicarInferenciaExitosa({ observacionId, imagenId, usuarioId, inferencia }) {
+  return withTransaction(async (client) => {
+    const { rows: obsRows } = await client.query(
+      `SELECT estado_id FROM observacion WHERE id = $1 FOR UPDATE`,
+      [observacionId],
+    );
+    if (!obsRows[0]) {
+      throw new NoEncontradoError('Observación no encontrada al aplicar inferencia');
+    }
+    const estadoAnteriorId = obsRows[0].estado_id;
+
+    // Resolver especie propuesta (puede quedar null si el modelo propuso
+    // una especie que aún no está sembrada en nuestro catálogo).
+    let especieId = null;
+    if (inferencia.especie_codigo) {
+      const { rows } = await client.query(
+        `SELECT id FROM especie WHERE codigo = $1 LIMIT 1`,
+        [inferencia.especie_codigo],
+      );
+      especieId = rows[0]?.id ?? null;
+    }
+
+    // Resolver / crear version_modelo (activo=false para versiones nuevas:
+    // un admin decide después si es la vigente).
+    let versionModeloId = null;
+    if (inferencia.version_modelo) {
+      const { rows: vmRows } = await client.query(
+        `SELECT id FROM version_modelo WHERE version = $1 LIMIT 1`,
+        [inferencia.version_modelo],
+      );
+      if (vmRows[0]) {
+        versionModeloId = vmRows[0].id;
+      } else {
+        const { rows: nuevaVm } = await client.query(
+          `INSERT INTO version_modelo (version, activo) VALUES ($1, false) RETURNING id`,
+          [inferencia.version_modelo],
+        );
+        versionModeloId = nuevaVm[0].id;
+      }
+    }
+
+    // INSERT prediccion (append-only, nunca se UPDATEa).
+    await client.query(
+      `INSERT INTO prediccion (
+          observacion_id, imagen_id, especie_propuesta_id, version_modelo_id,
+          confianza, respuesta_cruda
+       )
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+      [
+        observacionId,
+        imagenId,
+        especieId,
+        versionModeloId,
+        inferencia.confianza,
+        JSON.stringify(inferencia.respuesta_cruda),
+      ],
+    );
+
+    // Decidir estado destino.
+    const idEntificado = inferencia.estado_vision === 'identificado' && especieId;
+    const codigoNuevo = idEntificado ? 'identificado' : 'pendiente_experto';
+    const motivo = idEntificado
+      ? `Modelo identificó especie con confianza ${inferencia.confianza}`
+      : inferencia.estado_vision === 'identificado'
+        ? 'Modelo propuso una especie no sembrada; requiere revisión'
+        : `Modelo no concluyente (confianza ${inferencia.confianza})`;
+    const estadoNuevoId = await obtenerEstadoIdPorCodigo(client, codigoNuevo);
+
+    if (idEntificado) {
+      await client.query(
+        `UPDATE observacion SET estado_id = $1, especie_aceptada_id = $2 WHERE id = $3`,
+        [estadoNuevoId, especieId, observacionId],
+      );
+    } else {
+      await client.query(
+        `UPDATE observacion SET estado_id = $1 WHERE id = $2`,
+        [estadoNuevoId, observacionId],
+      );
+    }
+
+    await client.query(
+      `INSERT INTO historial_estado (
+          observacion_id, estado_anterior_id, estado_nuevo_id, actor_usuario_id, motivo
+       )
+       VALUES ($1, $2, $3, $4, $5)`,
+      [observacionId, estadoAnteriorId, estadoNuevoId, usuarioId, motivo],
+    );
+
+    return codigoNuevo;
+  });
 }
 
 // ---------------------------------------------------------------------------
