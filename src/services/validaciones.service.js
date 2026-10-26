@@ -5,6 +5,11 @@ const {
   ConflictoError,
 } = require('../utils/errors');
 const { ESTADOS_PENDIENTES } = require('./observaciones.service');
+const { enviarFeedbackAlModelo } = require('./vision.service');
+
+// Decisiones que generan dataset de reentrenamiento. 'rechazada' queda fuera:
+// no hay especie confirmada que enviar.
+const DECISIONES_CON_FEEDBACK = new Set(['confirmada', 'corregida']);
 
 /**
  * Mapa decisión → { nuevoEstado, usaEspecie }.
@@ -87,7 +92,7 @@ async function registrarValidacion({
     );
   }
 
-  return withTransaction(async (client) => {
+  const resultado = await withTransaction(async (client) => {
     // 1. Bloquear la observación y leer su estado actual.
     const { rows: obsRows } = await client.query(
       `SELECT o.id, o.estado_id, e.codigo AS estado_codigo
@@ -168,14 +173,64 @@ async function registrarValidacion({
       ],
     );
 
+    // 8. Contexto para feedback al modelo (fuera de la TX).
+    //    Lo juntamos aquí, con la conexión abierta: trae la especie confirmada
+    //    (ya actualizada en el paso 6), el path de la imagen y la identidad
+    //    del experto. Si falta algo (p. ej. observación sin imagen), queda
+    //    null y el fire-and-forget simplemente no se dispara.
+    const { rows: ctxRows } = await client.query(
+      `SELECT i.url_storage AS imagen_path,
+              u.nombre_completo,
+              u.correo,
+              esp.codigo AS especie_codigo
+       FROM observacion o
+       JOIN usuario u ON u.id = $2
+       LEFT JOIN imagen i ON i.observacion_id = o.id
+       LEFT JOIN especie esp ON esp.id = o.especie_aceptada_id
+       WHERE o.id = $1
+       ORDER BY i.orden ASC NULLS LAST
+       LIMIT 1`,
+      [observacionId, experto.id],
+    );
+    const feedbackCtx = ctxRows[0] || null;
+
     return {
-      id: validacion.id,
-      decision,
-      estado: regla.nuevoEstado,
-      especie_aceptada: especieFinal,
-      creado_en: validacion.creado_en,
+      resumen: {
+        id: validacion.id,
+        decision,
+        estado: regla.nuevoEstado,
+        especie_aceptada: especieFinal,
+        creado_en: validacion.creado_en,
+      },
+      feedbackCtx,
     };
   });
+
+  // Fire-and-forget: feedback al modelo del Equipo 2 para dataset de
+  // reentrenamiento. Solo aplica en 'confirmada' / 'corregida' (en
+  // 'rechazada' no hay especie confirmada que mandar). NUNCA bloqueamos la
+  // respuesta al cliente y el error se come en el .catch; vision.service
+  // ya devuelve null en vez de lanzar en los fallos esperados, pero el
+  // .catch cubre fallos sincrónicos / de red inesperados.
+  if (DECISIONES_CON_FEEDBACK.has(decision) && resultado.feedbackCtx) {
+    const ctx = resultado.feedbackCtx;
+    if (ctx.especie_codigo && ctx.imagen_path) {
+      const validadoPor = ctx.nombre_completo
+        ? `${ctx.nombre_completo} <${ctx.correo}>`
+        : ctx.correo || '';
+      enviarFeedbackAlModelo({
+        observacionId,
+        especieCodigo: ctx.especie_codigo,
+        imagenPath: ctx.imagen_path,
+        validadoPor,
+      }).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[Feedback] catch:', err.message);
+      });
+    }
+  }
+
+  return resultado.resumen;
 }
 
 module.exports = {

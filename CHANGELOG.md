@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-10-26 — Feedback al modelo del Equipo 2 tras validación experta
+
+Cuando un experto registra una validación con decisión `confirmada` o
+`corregida`, el backend hace **fire-and-forget** a `VISION_FEEDBACK_URL` con la
+especie confirmada para alimentar el dataset de reentrenamiento del Equipo 2.
+`rechazada` no envía nada (no hay especie confirmada).
+
+### Reglas
+
+- Es best-effort: cualquier fallo del endpoint queda en `console.warn` y la
+  validación responde 201 como si nada.
+- URL de la imagen firmada a 600 s. Header `x-api-key`. Timeout 10 s.
+- El payload es `{ id_observacion, especie_confirmada, validado_por, url_imagen }`.
+- `validado_por` se arma como `"<nombre_completo> <<correo>>"` leído de la BD
+  dentro de la misma transacción de la validación (no hay round-trip extra
+  tras el commit).
+
+### Cambios
+
+- `src/services/vision.service.js` — nueva función `enviarFeedbackAlModelo`.
+- `src/services/validaciones.service.js` — recolecta `imagen.url_storage`,
+  `especie.codigo` (post-UPDATE) y datos del experto dentro de la TX, y
+  dispara el feedback fuera del commit (`.catch` para que una rechazo del
+  promise no se escape como "unhandled rejection").
+- `.env.example` — nueva `VISION_FEEDBACK_URL`.
+- Tests nuevos: 5 casos en `tests/vision.service.test.js` (éxito 201, fallo
+  500, sin especie, sin URL, error de red) y `tests/validaciones.service.test.js`
+  completo (5 casos: confirmada, corregida, rechazada, feedback que lanza,
+  observación sin especie confirmada).
+
 ## 2026-10-26 — Integración con el servicio de visión del Equipo 2
 
 Al crear una observación (`POST /api/v1/observaciones`) el backend llama ahora al

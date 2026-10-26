@@ -96,8 +96,80 @@ async function solicitarInferencia(observacionId, imagenPath) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Feedback al modelo (dataset de reentrenamiento del Equipo 2)
+// ---------------------------------------------------------------------------
+
+// 10s: el endpoint de feedback solo recibe metadatos + URL, es más rápido que
+// la inferencia.
+const FEEDBACK_TIMEOUT_MS = 10_000;
+
+/**
+ * Envía la validación experta al modelo del Equipo 2 para construir dataset
+ * de reentrenamiento. **Best-effort**: cualquier fallo se registra en logs
+ * pero NUNCA se propaga al llamador; devuelve `null` cuando no pudo enviar.
+ *
+ * @param {object} args
+ * @param {string} args.observacionId
+ * @param {string} args.especieCodigo    código del catálogo (p. ej. 'Hypanus_guttatus')
+ * @param {string} args.imagenPath       path dentro del bucket de Supabase
+ * @param {string} args.validadoPor      texto descriptivo del experto ("Nombre <correo>")
+ */
+async function enviarFeedbackAlModelo({ observacionId, especieCodigo, imagenPath, validadoPor }) {
+  const feedbackUrl = process.env.VISION_FEEDBACK_URL;
+  const apiKey = process.env.VISION_API_KEY;
+
+  if (!feedbackUrl) {
+    // eslint-disable-next-line no-console
+    console.warn('[Feedback] VISION_FEEDBACK_URL no configurada, saltando');
+    return null;
+  }
+  if (!especieCodigo) {
+    // eslint-disable-next-line no-console
+    console.warn('[Feedback] No se envía porque no hay especie confirmada');
+    return null;
+  }
+
+  try {
+    const imagenUrl = await supabase.getSignedUrl(imagenPath, SIGNED_URL_SEGUNDOS);
+
+    const response = await fetch(feedbackUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey || '',
+      },
+      body: JSON.stringify({
+        id_observacion: observacionId,
+        especie_confirmada: especieCodigo,
+        validado_por: validadoPor || '',
+        url_imagen: imagenUrl,
+      }),
+      signal: AbortSignal.timeout(FEEDBACK_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      // eslint-disable-next-line no-console
+      console.warn(`[Feedback] Fallo ${response.status}: ${body}`);
+      return null;
+    }
+
+    const data = await response.json();
+    // eslint-disable-next-line no-console
+    console.log(`[Feedback] OK — ${data.estado} para observación ${observacionId}`);
+    return data;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[Feedback] Error:', error.message);
+    return null;
+  }
+}
+
 module.exports = {
   solicitarInferencia,
+  enviarFeedbackAlModelo,
   SIGNED_URL_SEGUNDOS,
   TIMEOUT_MS,
+  FEEDBACK_TIMEOUT_MS,
 };
