@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-10-28 — Aceptar MIME `image/jpg` y 413 para imagen demasiado grande
+
+Dos ajustes alineados con el contrato v1.4 de imágenes:
+
+1. El middleware de upload acepta `image/jpg` (variante no estándar que mandan
+   WhatsApp y varios clientes móviles) junto con `image/jpeg` y `image/png`.
+   Las dos variantes de JPEG se normalizan a `'jpeg'` al escribir en
+   `imagen.formato`, para seguir calzando con el CHECK de la BD
+   `formato IN ('jpeg','png')` — no se amplía el CHECK.
+2. El handler global ahora responde **413 ARCHIVO_DEMASIADO_GRANDE** cuando
+   multer dispara `LIMIT_FILE_SIZE` (antes: 400 VALIDACION). 413 es la
+   semántica HTTP correcta para "Payload Too Large"; los demás errores de
+   multer siguen cayendo en 400 VALIDACION.
+
+El límite de tamaño en multer sigue en 10 MB. `express.json` sigue en 1 MB
+(la API no recibe JSON grandes). No se agrega `express.urlencoded`.
+
+### Cambios
+
+- `src/middlewares/upload.middleware.js` — `MIMES_PERMITIDOS` incluye
+  `image/jpg`; `extensionDeMime` colapsa `image/jpg` → `'jpeg'`.
+- `src/middlewares/errorHandler.js` — nuevos helpers `statusMulter` y
+  `codigoMulter`; `LIMIT_FILE_SIZE` → 413 `ARCHIVO_DEMASIADO_GRANDE`.
+- `tests/observaciones.test.js` — 4 casos nuevos en `POST /observaciones`:
+  acepta `image/jpg`, acepta `image/jpeg`, rechaza `image/webp`, y rechaza
+  imagen de 11 MB con 413 `ARCHIVO_DEMASIADO_GRANDE`.
+
 ## 2026-10-26 — Feedback al modelo del Equipo 2 tras validación experta
 
 Cuando un experto registra una validación con decisión `confirmada` o

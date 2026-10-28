@@ -164,6 +164,88 @@ describe('POST /api/v1/observaciones', () => {
     expect(res.body.error.mensaje).toMatch(/JPEG|PNG/);
   });
 
+  // Caso A: cliente que envía MIME 'image/jpg' (no estándar pero común). Debe
+  // aceptarse igual que 'image/jpeg' y la imagen debe guardarse como 'jpeg'.
+  test('201: acepta mimetype image/jpg y lo normaliza a jpeg', async () => {
+    mockCrearObservacion.mockResolvedValueOnce({
+      id: 'obs-uuid-jpg',
+      estado: 'recibido',
+      creado_en: '2026-10-28T10:00:00.000Z',
+    });
+
+    const res = await request(app)
+      .post('/api/v1/observaciones')
+      .set('Authorization', `Bearer ${tokenValido()}`)
+      .field('datos', datosOk())
+      .attach('imagen', PNG_BUFFER, { filename: 'raya.jpg', contentType: 'image/jpg' });
+
+    expect(res.status).toBe(201);
+    expect(mockCrearObservacion).toHaveBeenCalledTimes(1);
+
+    const args = mockCrearObservacion.mock.calls[0][0];
+    expect(args.imagen.mimetype).toBe('image/jpg');
+
+    // El service canoniza vía extensionDeMime: image/jpg → 'jpeg'. Verificamos
+    // que la función exportada por el middleware aplica esa normalización, que
+    // es lo que termina llegando al INSERT de imagen.formato.
+    const { extensionDeMime } = require('../src/middlewares/upload.middleware');
+    expect(extensionDeMime(args.imagen.mimetype)).toBe('jpeg');
+  });
+
+  // Caso B: cliente envía MIME 'image/jpeg' estándar. Debe aceptarse (comparte
+  // comportamiento con el test 201 principal, pero lo dejamos explícito para
+  // documentar la paridad jpg/jpeg).
+  test('201: acepta mimetype image/jpeg', async () => {
+    mockCrearObservacion.mockResolvedValueOnce({
+      id: 'obs-uuid-jpeg',
+      estado: 'recibido',
+      creado_en: '2026-10-28T10:00:01.000Z',
+    });
+
+    const res = await request(app)
+      .post('/api/v1/observaciones')
+      .set('Authorization', `Bearer ${tokenValido()}`)
+      .field('datos', datosOk())
+      .attach('imagen', PNG_BUFFER, { filename: 'raya.jpeg', contentType: 'image/jpeg' });
+
+    expect(res.status).toBe(201);
+    expect(mockCrearObservacion.mock.calls[0][0].imagen.mimetype).toBe('image/jpeg');
+  });
+
+  // Imagen > 10 MB: multer dispara LIMIT_FILE_SIZE, el handler lo mapea a
+  // 413 ARCHIVO_DEMASIADO_GRANDE. El service no debe tocarse.
+  test('413: rechaza imagen de 11 MB con ARCHIVO_DEMASIADO_GRANDE', async () => {
+    const once_mb = 11 * 1024 * 1024;
+    const grande = Buffer.alloc(once_mb, 0);
+
+    const res = await request(app)
+      .post('/api/v1/observaciones')
+      .set('Authorization', `Bearer ${tokenValido()}`)
+      .field('datos', datosOk())
+      .attach('imagen', grande, { filename: 'raya.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(413);
+    expect(res.body.error.codigo).toBe('ARCHIVO_DEMASIADO_GRANDE');
+    expect(res.body.error.mensaje).toMatch(/10 MB/);
+    expect(mockCrearObservacion).not.toHaveBeenCalled();
+  });
+
+  // Caso C: webp sigue sin estar permitido. Multer debe rechazarlo con 400 y
+  // el service no debe recibir nada.
+  test('400: rechaza mimetype image/webp', async () => {
+    const webp = Buffer.from('RIFF\0\0\0\0WEBP', 'ascii');
+    const res = await request(app)
+      .post('/api/v1/observaciones')
+      .set('Authorization', `Bearer ${tokenValido()}`)
+      .field('datos', datosOk())
+      .attach('imagen', webp, { filename: 'raya.webp', contentType: 'image/webp' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.codigo).toBe('VALIDACION');
+    expect(res.body.error.mensaje).toMatch(/JPEG|PNG/);
+    expect(mockCrearObservacion).not.toHaveBeenCalled();
+  });
+
   test('401: sin token no se puede crear', async () => {
     const res = await request(app)
       .post('/api/v1/observaciones')

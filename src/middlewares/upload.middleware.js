@@ -1,7 +1,11 @@
 const multer = require('multer');
 const { ValidacionError } = require('../utils/errors');
 
-const MIMES_PERMITIDOS = new Set(['image/jpeg', 'image/png']);
+// 'image/jpg' no es estándar (el IANA correcto es 'image/jpeg'), pero varios
+// clientes móviles y navegadores todavía lo envían para archivos .jpg. Lo
+// aceptamos y lo normalizamos a 'jpeg' en extensionDeMime para calzar con el
+// CHECK de imagen.formato en la BD.
+const MIMES_PERMITIDOS = new Set(['image/jpeg', 'image/jpg', 'image/png']);
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const upload = multer({
@@ -23,7 +27,7 @@ const upload = multer({
  * en Supabase Storage, para mantener un único identificador.
  */
 function extensionDeMime(mimetype) {
-  if (mimetype === 'image/jpeg') return 'jpeg';
+  if (mimetype === 'image/jpeg' || mimetype === 'image/jpg') return 'jpeg';
   if (mimetype === 'image/png') return 'png';
   return 'bin';
 }

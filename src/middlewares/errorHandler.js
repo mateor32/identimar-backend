@@ -24,6 +24,16 @@ function mensajeMulter(err) {
   }
 }
 
+// LIMIT_FILE_SIZE merece 413 Payload Too Large (semántica HTTP correcta);
+// el resto de errores multer son violaciones de contrato del request → 400.
+function statusMulter(err) {
+  return err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+}
+
+function codigoMulter(err) {
+  return err.code === 'LIMIT_FILE_SIZE' ? 'ARCHIVO_DEMASIADO_GRANDE' : 'VALIDACION';
+}
+
 // Manejador global de errores: convierte ApiError en respuesta JSON.
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
@@ -35,8 +45,8 @@ function errorHandler(err, req, res, next) {
 
   if (err instanceof multer.MulterError) {
     return res
-      .status(400)
-      .json({ error: { codigo: 'VALIDACION', mensaje: mensajeMulter(err) } });
+      .status(statusMulter(err))
+      .json({ error: { codigo: codigoMulter(err), mensaje: mensajeMulter(err) } });
   }
 
   // JSON mal formado en el body
