@@ -537,6 +537,14 @@ Prefijo base: **`/api/v1`**. Las respuestas de error siguen el mismo formato:
 { "error": { "codigo": "VALIDACION", "mensaje": "...", "detalles": [...] } }
 ```
 
+**Documentación interactiva (OpenAPI 3.0):**
+
+- Producción: <https://identimar-backend.onrender.com/api/docs>
+- Spec cruda: <https://identimar-backend.onrender.com/api/docs.json>
+- Local:      <http://localhost:3000/api/docs>
+
+En la UI, el botón **Authorize** acepta el `access_token` recibido en `/auth/login` para probar endpoints protegidos.
+
 ### Salud
 
 | Método | Ruta | Descripción |

@@ -1,0 +1,529 @@
+openapi: 3.0.3
+info:
+  title: IdentiMar API
+  version: 1.0.0
+  description: |
+    API del backend de IdentiMar: registro y validación de observaciones de rayas
+    en el Urabá antioqueño. Las rutas están versionadas bajo `/api/v1`.
+servers:
+  - url: https://identimar-backend.onrender.com
+    description: Producción (Render)
+  - url: http://localhost:10000
+    description: Desarrollo local
+  - url: /
+    description: Mismo origen
+
+tags:
+  - name: Salud
+    description: Healthcheck del servicio
+  - name: Auth
+    description: Registro, login, refresh y perfil
+  - name: Catálogos
+    description: Catálogos para construir formularios y selects
+  - name: Observaciones
+    description: Creación, listado, detalle y validación experta
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Salud]
+      summary: Healthcheck
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /api/v1/auth/registro:
+    post:
+      tags: [Auth]
+      summary: Registra un nuevo usuario
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistroRequest' }
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario: { $ref: '#/components/schemas/UsuarioPublico' }
+        '400': { $ref: '#/components/responses/Validacion' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Inicia sesión y entrega tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokensResponse' }
+        '400': { $ref: '#/components/responses/Validacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Intercambia un refresh_token por un nuevo access_token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: Nuevo access_token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  expires_in: { type: integer, example: 3600 }
+        '400': { $ref: '#/components/responses/Validacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /api/v1/auth/perfil:
+    get:
+      tags: [Auth]
+      summary: Devuelve el usuario autenticado
+      responses:
+        '200':
+          description: Perfil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario: { $ref: '#/components/schemas/UsuarioPublico' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /api/v1/catalogos/especies:
+    get:
+      tags: [Catálogos]
+      summary: Lista de especies
+      security: []
+      responses:
+        '200':
+          description: Especies
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Especie' }
+
+  /api/v1/catalogos/familias:
+    get:
+      tags: [Catálogos]
+      summary: Lista de familias
+      security: []
+      responses:
+        '200':
+          description: Familias
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CatalogoItem' }
+
+  /api/v1/catalogos/tipos-ambiente:
+    get:
+      tags: [Catálogos]
+      summary: Tipos de ambiente
+      security: []
+      responses:
+        '200':
+          description: Tipos de ambiente
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CatalogoItem' }
+
+  /api/v1/catalogos/condiciones-organismo:
+    get:
+      tags: [Catálogos]
+      summary: Condiciones del organismo
+      security: []
+      responses:
+        '200':
+          description: Condiciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CatalogoItem' }
+
+  /api/v1/catalogos/estados:
+    get:
+      tags: [Catálogos]
+      summary: Estados posibles de una observación
+      security: []
+      responses:
+        '200':
+          description: Estados
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CatalogoItem' }
+
+  /api/v1/observaciones:
+    post:
+      tags: [Observaciones]
+      summary: Crea una observación con imagen
+      description: |
+        `multipart/form-data` con dos campos:
+          - `datos`: JSON stringificado con los campos de la observación.
+          - `imagen`: binario JPEG/PNG, máximo 10 MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos, imagen]
+              properties:
+                datos:
+                  type: string
+                  description: JSON stringificado de `ObservacionInput`.
+                  example: '{"latitud":8.75,"longitud":-76.72,"fecha_hora_evento":"2026-01-15T10:30:00-05:00","tipo_ambiente_codigo":"MANGLAR","condicion_organismo_codigo":"VIVO"}'
+                imagen:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Observación creada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ObservacionCreada' }
+        '400': { $ref: '#/components/responses/Validacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '413': { $ref: '#/components/responses/ArchivoDemasiadoGrande' }
+    get:
+      tags: [Observaciones]
+      summary: Lista observaciones (propias, o todas si es admin)
+      parameters:
+        - in: query
+          name: estado
+          schema: { type: string }
+          description: Filtra por nombre de estado (p. ej. `pendiente`).
+        - in: query
+          name: pagina
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: tamano
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Página de observaciones
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginaObservaciones' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /api/v1/observaciones/pendientes:
+    get:
+      tags: [Observaciones]
+      summary: Cola de pendientes (solo experto/administrador)
+      parameters:
+        - in: query
+          name: pagina
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: tamano
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Página de pendientes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginaObservaciones' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+
+  /api/v1/observaciones/{id}:
+    get:
+      tags: [Observaciones]
+      summary: Detalle de una observación
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Observación completa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ObservacionDetalle' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /api/v1/observaciones/{id}/validacion:
+    post:
+      tags: [Observaciones]
+      summary: Registra la validación experta de una observación
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ValidacionRequest' }
+      responses:
+        '201':
+          description: Validación registrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidacionResponse' }
+        '400': { $ref: '#/components/responses/Validacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            codigo:
+              type: string
+              example: VALIDACION
+            mensaje:
+              type: string
+              example: Datos inválidos
+            detalles:
+              type: array
+              items:
+                type: object
+                properties:
+                  campo: { type: string }
+                  mensaje: { type: string }
+
+    UsuarioPublico:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nombre_completo: { type: string }
+        correo: { type: string, format: email }
+        telefono: { type: string, nullable: true }
+        rol: { type: string, enum: [usuario, experto, administrador] }
+        activo: { type: boolean }
+
+    RegistroRequest:
+      type: object
+      required: [nombre_completo, correo, password]
+      properties:
+        nombre_completo: { type: string, minLength: 2, maxLength: 120 }
+        correo: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 72 }
+        telefono: { type: string, maxLength: 30 }
+
+    LoginRequest:
+      type: object
+      required: [correo, password]
+      properties:
+        correo: { type: string, format: email }
+        password: { type: string }
+
+    TokensResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, example: 3600 }
+        usuario: { $ref: '#/components/schemas/UsuarioPublico' }
+
+    CatalogoItem:
+      type: object
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+
+    Especie:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nombre_cientifico: { type: string }
+        nombre_comun: { type: string, nullable: true }
+        familia: { type: string, nullable: true }
+
+    ObservacionInput:
+      type: object
+      required: [latitud, longitud, fecha_hora_evento, tipo_ambiente_codigo, condicion_organismo_codigo]
+      properties:
+        latitud: { type: number, minimum: -90, maximum: 90 }
+        longitud: { type: number, minimum: -180, maximum: 180 }
+        precision_gps_metros: { type: number, minimum: 0 }
+        fecha_hora_evento:
+          type: string
+          format: date-time
+          description: ISO-8601 con offset (eventDate).
+        tipo_ambiente_codigo: { type: string }
+        condicion_organismo_codigo: { type: string }
+        especie_aceptada_id: { type: string, format: uuid }
+        observaciones_usuario: { type: string, maxLength: 1000 }
+
+    ObservacionCreada:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        estado: { type: string, example: pendiente }
+        creada_en: { type: string, format: date-time }
+
+    PaginaObservaciones:
+      type: object
+      properties:
+        datos:
+          type: array
+          items: { $ref: '#/components/schemas/ObservacionResumen' }
+        meta:
+          type: object
+          properties:
+            pagina: { type: integer, example: 1 }
+            tamano: { type: integer, example: 20 }
+            total: { type: integer, example: 42 }
+
+    ObservacionResumen:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        estado: { type: string }
+        fecha_hora_evento: { type: string, format: date-time }
+        latitud: { type: number }
+        longitud: { type: number }
+
+    ObservacionDetalle:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        estado: { type: string }
+        latitud: { type: number }
+        longitud: { type: number }
+        fecha_hora_evento: { type: string, format: date-time }
+        usuario: { $ref: '#/components/schemas/UsuarioPublico' }
+        imagen:
+          type: object
+          nullable: true
+          properties:
+            formato: { type: string, enum: [jpeg, png] }
+            ancho: { type: integer }
+            alto: { type: integer }
+            url_firmada: { type: string, format: uri }
+            url_expira_en: { type: integer, example: 3600 }
+        prediccion:
+          type: object
+          nullable: true
+          properties:
+            especie_sugerida_id: { type: string, format: uuid, nullable: true }
+            confianza: { type: number, nullable: true }
+            modelo: { type: string, nullable: true }
+        validacion:
+          type: object
+          nullable: true
+          properties:
+            decision: { type: string, enum: [confirmada, corregida, rechazada] }
+            comentario: { type: string, nullable: true }
+            experto_id: { type: string, format: uuid }
+            creada_en: { type: string, format: date-time }
+        historial:
+          type: array
+          items:
+            type: object
+            properties:
+              estado: { type: string }
+              creado_en: { type: string, format: date-time }
+
+    ValidacionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [confirmada, corregida, rechazada]
+        especie_final_codigo:
+          type: string
+          description: Obligatorio si `decision = corregida`.
+        comentario: { type: string, maxLength: 1000 }
+
+    ValidacionResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        observacion_id: { type: string, format: uuid }
+        decision: { type: string, enum: [confirmada, corregida, rechazada] }
+        creada_en: { type: string, format: date-time }
+
+  responses:
+    Validacion:
+      description: Datos inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NoAutenticado:
+      description: No autenticado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    SinPermiso:
+      description: Sin permiso
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NoEncontrado:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflicto:
+      description: Conflicto con el estado actual del recurso
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ArchivoDemasiadoGrande:
+      description: La imagen excede el tamaño máximo permitido (10 MB)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
